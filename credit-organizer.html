@@ -642,11 +642,13 @@
 
   function filteredClients() {
     var q = state.query.trim().toLowerCase();
-    if (!q) return state.clients;
-    return state.clients.filter(function (c) {
+    var list = !q ? state.clients : state.clients.filter(function (c) {
       return (c.name || "").toLowerCase().indexOf(q) !== -1 ||
         (c.creditNumber || "").toLowerCase().indexOf(q) !== -1 ||
         (c.phone || "").toLowerCase().indexOf(q) !== -1;
+    });
+    return list.slice().sort(function (a, b) {
+      return (a.name || "").localeCompare(b.name || "", "bg");
     });
   }
 
