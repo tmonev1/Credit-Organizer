@@ -80,8 +80,13 @@
   .empty-main-body { font-size: 13px; }
 
   .client-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-  .client-title { font-size: 23px; color: var(--navy); }
-  .client-meta { display: flex; gap: 14px; margin-top: 6px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .client-title { font-size: 32px; color: var(--navy); line-height: 1.15; }
+  .info-card {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-top: 14px;
+  }
+  .info-field-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .info-field-value { font-size: 19px; color: var(--ink); font-family: Georgia, serif; }
   .header-actions { display: flex; gap: 8px; }
   .icon-btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; color: var(--navy); }
   .icon-btn.danger { color: var(--brick); }
@@ -153,6 +158,26 @@
     width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
     font-size: 13.5px; color: var(--ink); outline: none; resize: vertical;
   }
+
+  .main-layout { display: flex; flex-direction: column; gap: 20px; align-items: flex-start; }
+  @media (min-width: 1050px) {
+    .main-layout { flex-direction: row; }
+    .main-content-col { flex: 1; min-width: 0; }
+    .notes-sidebar { width: 300px; flex-shrink: 0; position: sticky; top: 20px; }
+  }
+  .notes-panel { display: flex; flex-direction: column; }
+  .note-add-row { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .note-add-textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 16px;
+    color: var(--ink); outline: none; resize: vertical; box-sizing: border-box; font-family: -apple-system, system-ui, sans-serif;
+  }
+  .note-add-btn { background: var(--navy); color: #EDE7D6; border: none; border-radius: 6px; padding: 9px 12px; font-size: 13px; cursor: pointer; align-self: flex-end; }
+  .note-list { max-height: 480px; overflow-y: auto; }
+  .note-item { padding: 12px 14px; border-top: 1px solid var(--line); }
+  .note-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .note-item-date { font-size: 11px; color: var(--muted); }
+  .note-del { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 2px 6px; }
+  .note-item-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; font-family: -apple-system, system-ui, sans-serif; white-space: pre-wrap; }
 
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(19,30,51,0.55); display: flex; align-items: center;
@@ -236,9 +261,20 @@
     var p = iso.split("-");
     return p[2] + "." + p[1] + "." + p[0];
   }
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function toISODateTime(d) {
+    var dt = new Date(d);
+    return dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate()) + "T" + pad2(dt.getHours()) + ":" + pad2(dt.getMinutes());
+  }
+  function formatDateTimeBG(iso) {
+    if (!iso) return "—";
+    var datePart = iso.split("T")[0];
+    var timePart = iso.split("T")[1] || "";
+    return formatDateBG(datePart) + (timePart ? ", " + timePart + " ч." : "");
+  }
   function formatMoney(n) {
     var num = Number(n) || 0;
-    return num.toLocaleString("bg-BG", { maximumFractionDigits: 2 }) + " лв.";
+    return num.toLocaleString("bg-BG", { maximumFractionDigits: 2 }) + " €";
   }
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -318,14 +354,13 @@
     form: emptyForm(),
     formError: "",
     confirmDeleteId: null,
-    noteDraft: "",
     calCursor: (function () { var n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; })(),
     markCount: ""
   };
 
   function emptyForm() {
     return { name: "", phone: "", creditNumber: "", amount: "", installment: "", installmentCount: "", frequency: "weekly", firstDueDate: "",
-      workplace: "", contactName: "", contactPhone: "", note: "" };
+      workplace: "", contactName: "", contactPhone: "" };
   }
 
   function loadClients() {
@@ -350,7 +385,6 @@
   function selectClient(id) {
     state.selectedId = id;
     var c = getSelected();
-    state.noteDraft = c ? (c.note || "") : "";
     render();
   }
 
@@ -375,7 +409,6 @@
       workplace: client.workplace || "",
       contactName: client.contactName || "",
       contactPhone: client.contactPhone || "",
-      note: client.note || ""
     };
     state.editingId = client.id;
     state.formError = "";
@@ -414,7 +447,7 @@
           amount: newAmount, installment: newInstallment, frequency: frequency,
           firstDueDate: effectiveFirstDue,
           workplace: f.workplace.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(),
-          note: f.note, schedule: schedule
+          schedule: schedule
         });
       });
     } else {
@@ -425,11 +458,10 @@
         amount: f.amount === "" ? 0 : amountNum, installment: f.installment === "" ? 0 : installmentNum,
         frequency: frequency, firstDueDate: firstDueDate || (schedule2[0] ? schedule2[0].dueDate : ""),
         workplace: f.workplace.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(),
-        note: f.note, createdDate: createdDate, schedule: schedule2, payments: []
+        createdDate: createdDate, schedule: schedule2, payments: [], notes: []
       };
       state.clients = [newClient].concat(state.clients);
       state.selectedId = newClient.id;
-      state.noteDraft = newClient.note || "";
     }
     state.showForm = false;
     persist();
@@ -474,9 +506,25 @@
     render();
   }
 
-  function saveNote(clientId) {
-    state.clients = state.clients.map(function (c) { return c.id === clientId ? Object.assign({}, c, { note: state.noteDraft }) : c; });
+  function addNote(clientId, text) {
+    var trimmed = (text || "").trim();
+    if (!trimmed) return;
+    state.clients = state.clients.map(function (c) {
+      if (c.id !== clientId) return c;
+      var notes = (c.notes || []).concat([{ id: uid(), dateTime: toISODateTime(new Date()), text: trimmed }]);
+      return Object.assign({}, c, { notes: notes });
+    });
     persist();
+    render();
+  }
+
+  function deleteNote(clientId, noteId) {
+    state.clients = state.clients.map(function (c) {
+      if (c.id !== clientId) return c;
+      return Object.assign({}, c, { notes: (c.notes || []).filter(function (n) { return n.id !== noteId; }) });
+    });
+    persist();
+    render();
   }
 
   function exportBackup() {
@@ -579,20 +627,20 @@
     var freqInfo = FREQUENCIES[client.frequency] || FREQUENCIES.weekly;
 
     var html = '<div class="main-pane">';
+    html += '<div class="main-layout">';
+    html += '<div class="main-content-col">';
+
     html += '<div class="client-header">' +
-      '<div><div class="client-title">' + esc(client.name) + '</div>' +
-      '<div class="client-meta sans">' +
-      (client.phone ? '<span>☎ ' + esc(client.phone) + '</span>' : '') +
-      '<span>№ ' + esc(client.creditNumber || "без номер") + '</span>' +
-      (client.workplace ? '<span>💼 ' + esc(client.workplace) + '</span>' : '') +
-      '</div>' +
-      (client.contactName || client.contactPhone ?
-        '<div class="client-meta sans" style="margin-top:4px;">' +
-        '<span>Лице за контакт: ' + esc(client.contactName || "—") + (client.contactPhone ? ' · ' + esc(client.contactPhone) : '') + '</span>' +
-        '</div>' : '') +
-      '</div>' +
+      '<div class="client-title">' + esc(client.name) + '</div>' +
       '<div class="header-actions"><button class="icon-btn" data-edit="' + client.id + '">✎</button>' +
       '<button class="icon-btn danger" data-delete="' + client.id + '">✕</button></div>' +
+      '</div>';
+
+    html += '<div class="info-card">' +
+      infoField("Телефон", client.phone) +
+      infoField("Номер на кредит", client.creditNumber) +
+      infoField("Месторабота", client.workplace) +
+      infoField("Лице за контакт", client.contactName ? (client.contactName + (client.contactPhone ? " · " + client.contactPhone : "")) : (client.contactPhone || "")) +
       '</div>';
 
     html += '<div class="stat-grid">' +
@@ -602,7 +650,6 @@
       statCard("Платено общо", formatMoney(summary.totalPaid), "teal") +
       statCard("Дължимо към днешна дата", formatMoney(summary.overdueAmount), summary.overdueAmount > 0 ? "brick" : "teal") +
       statCard("Закъснение", summary.days > 0 ? summary.days + " дни" : "няма", summary.days > 0 ? "brick" : "teal") +
-      statCard("Сума за предсрочно погасяване", "очаква лихвен %", "") +
       '</div>';
 
     if (summary.days > 0) {
@@ -614,11 +661,11 @@
 
     html += renderPaymentsPanel(client);
 
-    html += '<div class="note-section">' +
-      '<div class="note-label sans">📝 Бележка</div>' +
-      '<textarea class="note-textarea" id="note-textarea" rows="3" placeholder="Свободна бележка за клиента...">' + esc(state.noteDraft) + '</textarea>' +
-      '</div>';
+    html += '</div>'; // .main-content-col
 
+    html += '<div class="notes-sidebar">' + renderNotesPanel(client) + '</div>';
+
+    html += '</div>'; // .main-layout
     html += '</div>';
     return html;
   }
@@ -626,6 +673,41 @@
   function statCard(label, value, tone) {
     return '<div class="stat-card"><div class="stat-label sans">' + label + '</div>' +
       '<div class="stat-value mono' + (tone ? ' ' + tone : '') + '">' + value + '</div></div>';
+  }
+
+  function infoField(label, value) {
+    return '<div class="info-field">' +
+      '<div class="info-field-label sans">' + label + '</div>' +
+      '<div class="info-field-value">' + esc(value || "—") + '</div>' +
+      '</div>';
+  }
+
+  function getClientNotes(client) {
+    if (client.notes && client.notes.length) return client.notes;
+    if (client.note) return [{ id: "legacy", dateTime: client.createdDate || "", text: client.note }];
+    return [];
+  }
+
+  function renderNotesPanel(client) {
+    var notes = getClientNotes(client).slice().sort(function (a, b) { return (b.dateTime || "").localeCompare(a.dateTime || ""); });
+    var rows = notes.map(function (n) {
+      return '<div class="note-item">' +
+        '<div class="note-item-head">' +
+        '<span class="note-item-date mono">' + esc(formatDateTimeBG(n.dateTime)) + '</span>' +
+        (n.id !== "legacy" ? '<button class="note-del" data-delete-note="' + client.id + '|' + n.id + '">✕</button>' : '') +
+        '</div>' +
+        '<div class="note-item-text">' + esc(n.text).replace(/\n/g, "<br>") + '</div>' +
+        '</div>';
+    }).join("");
+
+    return '<div class="panel-box notes-panel">' +
+      '<div class="panel-header"><span>Бележки</span></div>' +
+      '<div class="note-add-row">' +
+      '<textarea id="new-note-text" class="note-add-textarea sans" rows="2" placeholder="Нова бележка..."></textarea>' +
+      '<button id="add-note-btn" data-add-note="' + client.id + '" class="note-add-btn">Добави бележка</button>' +
+      '</div>' +
+      (notes.length === 0 ? '<div class="empty-schedule sans">Все още няма бележки.</div>' : '<div class="note-list">' + rows + '</div>') +
+      '</div>';
   }
 
   function renderScheduleTable(client, freqInfo, summary) {
@@ -642,7 +724,7 @@
         '<td class="mono" style="color:' + (isOverdue ? 'var(--brick)' : 'var(--ink)') + '">' + formatDateBG(s.dueDate) + '</td>' +
         '<td class="mono" style="text-align:right">' + formatMoney(s.amount) + '</td>' +
         '<td class="mono" style="text-align:right;color:var(--teal)">' + (s.paidAmount > 0 ? formatMoney(s.paidAmount) : "—") + '</td>' +
-        '<td class="mono" style="text-align:right;' + (isPaid ? '' : 'color:var(--brick)') + '">' + (isPaid ? "0.00 лв." : formatMoney(s.remaining)) + '</td>' +
+        '<td class="mono" style="text-align:right;' + (isPaid ? '' : 'color:var(--brick)') + '">' + (isPaid ? "0.00 €" : formatMoney(s.remaining)) + '</td>' +
         '<td style="text-align:center">' + (isOverdue ? '<span class="overdue-pill mono">' + overdueDays + ' дни</span>' : (isPaid ? '<span class="sans" style="color:var(--teal);font-size:12px">✓</span>' : '<span class="sans" style="color:var(--muted);font-size:12px">—</span>')) + '</td>' +
         '</tr>';
     }).join("");
@@ -775,15 +857,14 @@
       field("Име", '<input id="f-name" value="' + esc(f.name) + '" placeholder="Иван Иванов">') +
       field("Телефон", '<input id="f-phone" value="' + esc(f.phone) + '" placeholder="0888 123 456">') +
       field("Номер на кредит", '<input id="f-creditNumber" value="' + esc(f.creditNumber) + '" placeholder="напр. EC-10234">') +
-      field("Размер на кредита (лв.)", '<input id="f-amount" value="' + esc(f.amount) + '" inputmode="decimal" placeholder="1000">') +
-      field("Вноска (лв.)", '<input id="f-installment" value="' + esc(f.installment) + '" inputmode="decimal" placeholder="50">') +
+      field("Размер на кредита (€)", '<input id="f-amount" value="' + esc(f.amount) + '" inputmode="decimal" placeholder="1000">') +
+      field("Вноска (€)", '<input id="f-installment" value="' + esc(f.installment) + '" inputmode="decimal" placeholder="50">') +
       field("Брой вноски (по избор, ако не пишеш — смята се сам)", '<input id="f-installmentCount" value="' + esc(f.installmentCount) + '" inputmode="numeric" placeholder="напр. 10">') +
       field("Периодичност", '<select id="f-frequency">' + freqOptions + '</select>') +
       field("Дата на първа вноска", renderDateSelects("f-due", f.firstDueDate)) +
       field("Месторабота", '<input id="f-workplace" value="' + esc(f.workplace) + '" placeholder="напр. завод / фирма">') +
       field("Лице за контакт – име", '<input id="f-contactName" value="' + esc(f.contactName) + '" placeholder="напр. съпруга, роднина">') +
       field("Лице за контакт – телефон", '<input id="f-contactPhone" value="' + esc(f.contactPhone) + '" placeholder="0888 000 000">') +
-      field("Бележка", '<textarea id="f-note" rows="2">' + esc(f.note) + '</textarea>') +
       (state.formError ? '<div class="form-error">' + esc(state.formError) + '</div>' : '') +
       '<div class="form-hint">Ако оставиш датата на първа вноска празна, тя ще се изчисли от днес според избраната периодичност. При запис планът се преизчислява автоматично по новите стойности — записаните плащания не се засягат.</div>' +
       '<div class="modal-actions"><button type="button" class="btn-secondary" id="form-cancel">Отказ</button>' +
@@ -894,18 +975,25 @@
       });
     });
 
-    var noteArea = document.getElementById("note-textarea");
-    if (noteArea) {
-      noteArea.addEventListener("input", function (e) { state.noteDraft = e.target.value; });
-      noteArea.addEventListener("blur", function () {
-        var c = getSelected();
-        if (c) saveNote(c.id);
+    var addNoteBtn = document.getElementById("add-note-btn");
+    if (addNoteBtn) {
+      addNoteBtn.addEventListener("click", function () {
+        var textEl = document.getElementById("new-note-text");
+        var clientId = addNoteBtn.getAttribute("data-add-note");
+        if (textEl && textEl.value.trim()) addNote(clientId, textEl.value);
       });
     }
 
+    app.querySelectorAll("[data-delete-note]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var parts = el.getAttribute("data-delete-note").split("|");
+        deleteNote(parts[0], parts[1]);
+      });
+    });
+
     var formEl = document.getElementById("client-form");
     if (formEl) {
-      ["name","phone","creditNumber","amount","installment","installmentCount","frequency","workplace","contactName","contactPhone","note"].forEach(function (key) {
+      ["name","phone","creditNumber","amount","installment","installmentCount","frequency","workplace","contactName","contactPhone"].forEach(function (key) {
         var el = document.getElementById("f-" + key);
         if (el) el.addEventListener("input", function (e) { state.form[key] = e.target.value; });
       });
