@@ -429,7 +429,7 @@
 
   function emptyForm() {
     return { name: "", phone: "", creditNumber: "", amount: "", installment: "", installmentCount: "", frequency: "weekly", firstDueDate: "",
-      workplace: "", contactName: "", contactPhone: "" };
+      workplace: "", contactName: "", contactPhone: "", address: "" };
   }
 
   function loadClients() {
@@ -476,6 +476,7 @@
       frequency: client.frequency || "weekly",
       firstDueDate: client.firstDueDate || (client.schedule && client.schedule[0] ? client.schedule[0].dueDate : ""),
       workplace: client.workplace || "",
+      address: client.address || "",
       contactName: client.contactName || "",
       contactPhone: client.contactPhone || "",
     };
@@ -515,7 +516,7 @@
           name: f.name.trim(), phone: f.phone.trim(), creditNumber: f.creditNumber.trim(),
           amount: newAmount, installment: newInstallment, frequency: frequency,
           firstDueDate: effectiveFirstDue,
-          workplace: f.workplace.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(),
+          workplace: f.workplace.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(), address: f.address.trim(),
           schedule: schedule
         });
       });
@@ -526,7 +527,7 @@
         id: uid(), name: f.name.trim(), phone: f.phone.trim(), creditNumber: f.creditNumber.trim(),
         amount: f.amount === "" ? 0 : amountNum, installment: f.installment === "" ? 0 : installmentNum,
         frequency: frequency, firstDueDate: firstDueDate || (schedule2[0] ? schedule2[0].dueDate : ""),
-        workplace: f.workplace.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(),
+        workplace: f.workplace.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(), address: f.address.trim(),
         createdDate: createdDate, schedule: schedule2, payments: [], notes: []
       };
       state.clients = [newClient].concat(state.clients);
@@ -710,6 +711,7 @@
       infoField("Телефон", client.phone) +
       infoField("Номер на кредит", client.creditNumber) +
       infoField("Месторабота", client.workplace) +
+      infoField("Адрес", client.address) +
       infoField("Лице за контакт", client.contactName ? (client.contactName + (client.contactPhone ? " · " + client.contactPhone : "")) : (client.contactPhone || "")) +
       '</div>';
 
@@ -934,6 +936,7 @@
       field("Периодичност", '<select id="f-frequency">' + freqOptions + '</select>') +
       field("Дата на първа вноска", renderDateSelects("f-due", f.firstDueDate)) +
       field("Месторабота", '<input id="f-workplace" value="' + esc(f.workplace) + '" placeholder="напр. завод / фирма">') +
+      field("Адрес", '<input id="f-address" value="' + esc(f.address) + '" placeholder="напр. ул. Примерна 12, Русе">') +
       field("Лице за контакт – име", '<input id="f-contactName" value="' + esc(f.contactName) + '" placeholder="напр. съпруга, роднина">') +
       field("Лице за контакт – телефон", '<input id="f-contactPhone" value="' + esc(f.contactPhone) + '" placeholder="0888 000 000">') +
       (state.formError ? '<div class="form-error">' + esc(state.formError) + '</div>' : '') +
@@ -1064,7 +1067,7 @@
 
     var formEl = document.getElementById("client-form");
     if (formEl) {
-      ["name","phone","creditNumber","amount","installment","installmentCount","frequency","workplace","contactName","contactPhone"].forEach(function (key) {
+      ["name","phone","creditNumber","amount","installment","installmentCount","frequency","workplace","address","contactName","contactPhone"].forEach(function (key) {
         var el = document.getElementById("f-" + key);
         if (el) el.addEventListener("input", function (e) { state.form[key] = e.target.value; });
       });
