@@ -159,7 +159,7 @@
   .field { margin-bottom: 12px; flex: 1; }
   .field-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   .field input, .field select, .field textarea {
-    width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13.5px;
+    width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 16px;
     color: var(--ink); outline: none; box-sizing: border-box; background: #fff;
   }
   .field-row { display: flex; gap: 10px; }
@@ -671,14 +671,10 @@
       field("Име", '<input id="f-name" value="' + esc(f.name) + '" placeholder="Иван Иванов">') +
       field("Телефон", '<input id="f-phone" value="' + esc(f.phone) + '" placeholder="0888 123 456">') +
       field("Номер на кредит", '<input id="f-creditNumber" value="' + esc(f.creditNumber) + '" placeholder="напр. EC-10234">') +
-      '<div class="field-row">' +
       field("Размер на кредита (лв.)", '<input id="f-amount" value="' + esc(f.amount) + '" inputmode="decimal" placeholder="1000">') +
       field("Вноска (лв.)", '<input id="f-installment" value="' + esc(f.installment) + '" inputmode="decimal" placeholder="50">') +
-      '</div>' +
-      '<div class="field-row">' +
       field("Периодичност", '<select id="f-frequency">' + freqOptions + '</select>') +
       field("Дата на първа вноска", '<input type="date" id="f-firstDueDate" value="' + esc(f.firstDueDate) + '">') +
-      '</div>' +
       field("Бележка", '<textarea id="f-note" rows="2">' + esc(f.note) + '</textarea>') +
       (state.formError ? '<div class="form-error">' + esc(state.formError) + '</div>' : '') +
       '<div class="form-hint">Ако оставиш датата на първа вноска празна, тя ще се изчисли от днес според избраната периодичност. При запис планът се преизчислява автоматично по новите стойности — вече отбелязаните платени вноски се запазват по ред.</div>' +
