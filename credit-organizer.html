@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Кредитен тефтер</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Кредитен тефтер">
+<meta name="theme-color" content="#1C2B45">
+<style>
+  :root {
+    --bg: #F5F2E9;
+    --panel: #FFFFFF;
+    --navy: #1C2B45;
+    --navyDeep: #131E33;
+    --navySoft: #3A4E6E;
+    --teal: #2F6459;
+    --tealSoft: #E3EEE9;
+    --brick: #9C3B2A;
+    --brickSoft: #F5E3DE;
+    --gold: #A97A2F;
+    --ink: #26241F;
+    --muted: #847F72;
+    --line: #E1DAC7;
+    --amberSoft: #F6EBD8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); }
+  body {
+    font-family: Georgia, 'Iowan Old Style', serif;
+    color: var(--ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+  input, select, textarea, button { font-family: -apple-system, system-ui, sans-serif; }
+  .sans { font-family: -apple-system, system-ui, sans-serif; }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
+  #app { display: flex; flex-direction: column; min-height: 100vh; }
+  @media (min-width: 768px) { #app { flex-direction: row; } }
+
+  .sidebar { background: var(--navy); width: 100%; display: flex; flex-direction: column; }
+  @media (min-width: 768px) { .sidebar { width: 320px; min-height: 100vh; } }
+  .sidebar-header { padding: 20px 20px 16px; border-bottom: 1px solid var(--navySoft); }
+  .sidebar-title { color: #EDE7D6; font-size: 20px; }
+  .sidebar-sub { color: #9AA6BB; font-size: 12.5px; margin-top: 3px; }
+  .sidebar-sub .warn { color: #E5A79A; }
+  .sidebar-controls { padding: 14px 16px; }
+  .search-input {
+    width: 100%; background: var(--navyDeep); border: 1px solid var(--navySoft);
+    border-radius: 6px; padding: 9px 12px; color: #EDE7D6; font-size: 13.5px; outline: none;
+  }
+  .add-btn {
+    width: 100%; margin-top: 10px; background: var(--gold); border: none; border-radius: 6px;
+    padding: 10px 12px; color: #231A08; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  }
+  .client-list { flex: 1; overflow-y: auto; padding: 0 8px 16px; max-height: 40vh; }
+  @media (min-width: 768px) { .client-list { max-height: none; } }
+  .client-row {
+    width: 100%; text-align: left; background: transparent; border: none;
+    border-bottom: 1px solid var(--navySoft); border-left: 3px solid transparent;
+    padding: 12px 12px 12px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 3px;
+  }
+  .client-row.selected { background: var(--navySoft); border-left: 3px solid var(--gold); }
+  .client-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .client-name { color: #F2EEE1; font-size: 14.5px; }
+  .client-delay-badge { font-size: 11.5px; color: #F6D9D0; background: #6E2F22; border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
+  .client-row-bottom { display: flex; justify-content: space-between; font-size: 12px; color: #9AA6BB; }
+  .empty-note { color: #7E8AA0; font-size: 13px; padding: 20px 12px; }
+
+  .main-pane { flex: 1; min-width: 0; padding: 22px 16px 40px; }
+  .empty-main { min-height: 400px; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .empty-main-inner { text-align: center; color: var(--muted); max-width: 320px; }
+  .empty-main-title { font-size: 15px; color: var(--ink); margin-bottom: 4px; }
+  .empty-main-body { font-size: 13px; }
+
+  .client-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .client-title { font-size: 23px; color: var(--navy); }
+  .client-meta { display: flex; gap: 14px; margin-top: 6px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .header-actions { display: flex; gap: 8px; }
+  .icon-btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; color: var(--navy); }
+  .icon-btn.danger { color: var(--brick); }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 18px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+  .stat-label { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .stat-value { font-size: 17px; }
+  .stat-value.brick { color: var(--brick); }
+  .stat-value.teal { color: var(--teal); }
+
+  .overdue-banner {
+    margin-top: 14px; background: var(--brickSoft); border: 1px solid #E3C3B7; border-radius: 6px;
+    padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #6E2818;
+  }
+
+  .grid-2col { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 24px; }
+  @media (min-width: 900px) { .grid-2col { grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); } }
+
+  .panel-box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .panel-header {
+    display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;
+    border-bottom: 1px solid var(--line); background: var(--amberSoft); font-size: 13.5px; font-weight: 600; color: var(--navy);
+  }
+  .link-btn { background: transparent; border: none; font-size: 11.5px; color: var(--gold); cursor: pointer; }
+  .mark-paid-row { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .mark-paid-row input { width: 60px; border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; font-size: 12.5px; outline: none; }
+  .mark-paid-row button { background: var(--teal); color: #fff; border: none; border-radius: 5px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  .empty-schedule { padding: 18px 14px; font-size: 13px; color: var(--muted); }
+
+  table.sched { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.sched th { text-align: left; padding: 7px 12px; font-weight: 500; font-size: 11.5px; color: var(--muted); }
+  table.sched td { padding: 7px 12px; border-top: 1px solid var(--line); }
+  .sched-wrap { max-height: 360px; overflow-y: auto; }
+  .overdue-pill { font-size: 11px; color: #6E2818; background: var(--brickSoft); border-radius: 4px; padding: 1px 7px; }
+  .paid-toggle {
+    width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid var(--line);
+    background: transparent; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .paid-toggle.paid { background: var(--teal); border-color: var(--teal); color: #fff; }
+
+  .cal-nav-btn { background: transparent; border: none; cursor: pointer; color: var(--navy); font-size: 16px; padding: 4px 8px; }
+  .cal-body { padding: 12px 12px 14px; }
+  .cal-dow-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px; }
+  .cal-dow { text-align: center; font-size: 10.5px; color: var(--muted); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-cell {
+    aspect-ratio: 1; border-radius: 5px; border: 1px solid var(--line); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-size: 11.5px; position: relative;
+  }
+  .cal-cell.today { border: 1.5px solid var(--navy); }
+  .cal-cell.overdue { background: var(--brickSoft); }
+  .cal-cell.paidday { background: var(--tealSoft); }
+  .cal-cell.upcoming { background: var(--amberSoft); }
+  .cal-dot { width: 5px; height: 5px; border-radius: 50%; margin-top: 2px; }
+  .cal-legend { display: flex; gap: 12px; margin-top: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .legend-dot { display: inline-flex; align-items: center; gap: 5px; }
+  .legend-dot .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+  .note-section { margin-top: 24px; }
+  .note-label { display: flex; align-items: center; gap: 6px; color: var(--navy); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .note-textarea {
+    width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
+    font-size: 13.5px; color: var(--ink); outline: none; resize: vertical;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(19,30,51,0.55); display: flex; align-items: center;
+    justify-content: center; padding: 16px; z-index: 50;
+  }
+  .modal-box { background: var(--panel); border-radius: 8px; padding: 22px; width: 100%; max-width: 420px; box-shadow: 0 12px 32px rgba(0,0,0,0.18); max-height: 90vh; overflow-y: auto; }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .modal-title { font-size: 17px; color: var(--navy); font-family: Georgia, serif; }
+  .modal-close { background: transparent; border: none; cursor: pointer; color: var(--muted); font-size: 18px; }
+  .field { margin-bottom: 12px; flex: 1; }
+  .field-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13.5px;
+    color: var(--ink); outline: none; box-sizing: border-box; background: #fff;
+  }
+  .field-row { display: flex; gap: 10px; }
+  .form-hint { font-size: 11.5px; color: var(--muted); margin-bottom: 14px; }
+  .form-error { color: var(--brick); font-size: 12.5px; margin-bottom: 10px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn-primary { background: var(--navy); color: #EDE7D6; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13.5px; cursor: pointer; }
+  .btn-primary.danger { background: var(--brick); }
+  .btn-secondary { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 9px 16px; font-size: 13.5px; cursor: pointer; }
+
+  .loading-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app"><div class="loading-screen">Зареждане на органайзера…</div></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "credit-clients-v1";
+  var DAY_MS = 24 * 60 * 60 * 1000;
+  var BG_DAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"];
+  var BG_MONTHS = ["януари","февруари","март","април","май","юни","юли","август","септември","октомври","ноември","декември"];
+  var FREQUENCIES = {
+    weekly: { label: "Ежеседмична", periodLabel: "Седм." },
+    biweekly: { label: "Двуседмична", periodLabel: "Период" },
+    monthly: { label: "Месечна", periodLabel: "Мес." }
+  };
+
+  function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
+  function toISODate(d) { var dt = new Date(d); dt.setHours(0,0,0,0); return dt.toISOString().slice(0,10); }
+  function startOfDay(d) { var dt = new Date(d); dt.setHours(0,0,0,0); return dt; }
+  function addPeriod(date, frequency, count) {
+    var dt = new Date(date);
+    if (frequency === "weekly") dt.setDate(dt.getDate() + 7 * count);
+    else if (frequency === "biweekly") dt.setDate(dt.getDate() + 14 * count);
+    else if (frequency === "monthly") dt.setMonth(dt.getMonth() + count);
+    else dt.setDate(dt.getDate() + 7 * count);
+    return dt;
+  }
+  function formatDateBG(iso) {
+    if (!iso) return "—";
+    var p = iso.split("-");
+    return p[2] + "." + p[1] + "." + p[0];
+  }
+  function formatMoney(n) {
+    var num = Number(n) || 0;
+    return num.toLocaleString("bg-BG", { maximumFractionDigits: 2 }) + " лв.";
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function generateSchedule(amount, installment, firstDueDateISO, frequency) {
+    var amt = Number(amount) || 0;
+    var inst = Number(installment) || 0;
+    if (amt <= 0 || inst <= 0) return [];
+    var freq = FREQUENCIES[frequency] ? frequency : "weekly";
+    var periods = Math.max(1, Math.ceil(amt / inst));
+    var first = startOfDay(firstDueDateISO || addPeriod(new Date(), freq, 1));
+    var schedule = [];
+    var remaining = amt;
+    for (var i = 0; i < periods; i++) {
+      var dueDate = i === 0 ? first : addPeriod(first, freq, i);
+      var thisAmount = i === periods - 1 ? Math.round(remaining * 100) / 100 : inst;
+      remaining = Math.round((remaining - thisAmount) * 100) / 100;
+      schedule.push({ id: uid(), week: i + 1, dueDate: toISODate(dueDate), amount: thisAmount, paid: false });
+    }
+    return schedule;
+  }
+
+  function computeDelay(schedule) {
+    var today = startOfDay(new Date());
+    var earliestOverdue = null, overdueCount = 0, overdueAmount = 0;
+    (schedule || []).forEach(function (item) {
+      if (!item.paid && startOfDay(item.dueDate) < today) {
+        overdueCount++;
+        overdueAmount += Number(item.amount) || 0;
+        if (!earliestOverdue || startOfDay(item.dueDate) < startOfDay(earliestOverdue)) earliestOverdue = item.dueDate;
+      }
+    });
+    if (!earliestOverdue) return { days: 0, count: 0, amount: 0 };
+    var days = Math.round((today - startOfDay(earliestOverdue)) / DAY_MS);
+    return { days: days, count: overdueCount, amount: Math.round(overdueAmount * 100) / 100 };
+  }
+
+  function mergeScheduleProgress(oldSchedule, newSchedule) {
+    if (!oldSchedule || oldSchedule.length === 0) return newSchedule;
+    return newSchedule.map(function (item, idx) {
+      var old = oldSchedule[idx];
+      return old ? Object.assign({}, item, { paid: !!old.paid }) : item;
+    });
+  }
+
+  // ---- state ----
+  var state = {
+    clients: [],
+    selectedId: null,
+    query: "",
+    showForm: false,
+    editingId: null,
+    form: emptyForm(),
+    formError: "",
+    confirmDeleteId: null,
+    noteDraft: "",
+    calCursor: (function () { var n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; })(),
+    markCount: ""
+  };
+
+  function emptyForm() {
+    return { name: "", phone: "", creditNumber: "", amount: "", installment: "", frequency: "weekly", firstDueDate: "", note: "" };
+  }
+
+  function loadClients() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        state.clients = Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) { /* ignore */ }
+  }
+  function persist() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.clients)); } catch (e) { /* ignore, e.g. private mode */ }
+  }
+
+  function getSelected() {
+    for (var i = 0; i < state.clients.length; i++) if (state.clients[i].id === state.selectedId) return state.clients[i];
+    return null;
+  }
+
+  // ---- actions ----
+  function selectClient(id) {
+    state.selectedId = id;
+    var c = getSelected();
+    state.noteDraft = c ? (c.note || "") : "";
+    render();
+  }
+
+  function openAddForm() {
+    state.form = emptyForm();
+    state.editingId = null;
+    state.formError = "";
+    state.showForm = true;
+    render();
+  }
+
+  function openEditForm(client) {
+    state.form = {
+      name: client.name || "",
+      phone: client.phone || "",
+      creditNumber: client.creditNumber || "",
+      amount: client.amount != null ? String(client.amount) : "",
+      installment: client.installment != null ? String(client.installment) : "",
+      frequency: client.frequency || "weekly",
+      firstDueDate: client.firstDueDate || (client.schedule && client.schedule[0] ? client.schedule[0].dueDate : ""),
+      note: client.note || ""
+    };
+    state.editingId = client.id;
+    state.formError = "";
+    state.showForm = true;
+    render();
+  }
+
+  function closeForm() { state.showForm = false; state.formError = ""; render(); }
+
+  function submitForm(e) {
+    e.preventDefault();
+    var f = state.form;
+    if (!f.name.trim()) { state.formError = "Въведи име на клиента."; render(); return; }
+    var amountNum = Number(f.amount);
+    var installmentNum = Number(f.installment);
+    if (f.amount && (isNaN(amountNum) || amountNum < 0)) { state.formError = "Размерът на кредита трябва да е число."; render(); return; }
+    if (f.installment && (isNaN(installmentNum) || installmentNum < 0)) { state.formError = "Вноската трябва да е число."; render(); return; }
+
+    var frequency = FREQUENCIES[f.frequency] ? f.frequency : "weekly";
+    var firstDueDate = f.firstDueDate || "";
+
+    if (state.editingId) {
+      state.clients = state.clients.map(function (c) {
+        if (c.id !== state.editingId) return c;
+        var newAmount = f.amount === "" ? c.amount : amountNum;
+        var newInstallment = f.installment === "" ? c.installment : installmentNum;
+        var effectiveFirstDue = firstDueDate || c.firstDueDate;
+        var schedule = c.schedule;
+        if (newAmount > 0 && newInstallment > 0) {
+          var generated = generateSchedule(newAmount, newInstallment, effectiveFirstDue, frequency);
+          schedule = mergeScheduleProgress(c.schedule, generated);
+        }
+        return Object.assign({}, c, {
+          name: f.name.trim(), phone: f.phone.trim(), creditNumber: f.creditNumber.trim(),
+          amount: newAmount, installment: newInstallment, frequency: frequency,
+          firstDueDate: effectiveFirstDue, note: f.note, schedule: schedule
+        });
+      });
+    } else {
+      var createdDate = toISODate(new Date());
+      var schedule2 = amountNum > 0 && installmentNum > 0 ? generateSchedule(amountNum, installmentNum, firstDueDate, frequency) : [];
+      var newClient = {
+        id: uid(), name: f.name.trim(), phone: f.phone.trim(), creditNumber: f.creditNumber.trim(),
+        amount: f.amount === "" ? 0 : amountNum, installment: f.installment === "" ? 0 : installmentNum,
+        frequency: frequency, firstDueDate: firstDueDate || (schedule2[0] ? schedule2[0].dueDate : ""),
+        note: f.note, createdDate: createdDate, schedule: schedule2
+      };
+      state.clients = [newClient].concat(state.clients);
+      state.selectedId = newClient.id;
+      state.noteDraft = newClient.note || "";
+    }
+    state.showForm = false;
+    persist();
+    render();
+  }
+
+  function deleteClient(id) {
+    state.clients = state.clients.filter(function (c) { return c.id !== id; });
+    if (state.selectedId === id) state.selectedId = null;
+    state.confirmDeleteId = null;
+    persist();
+    render();
+  }
+
+  function toggleInstallmentPaid(clientId, installmentId) {
+    state.clients = state.clients.map(function (c) {
+      if (c.id !== clientId) return c;
+      return Object.assign({}, c, {
+        schedule: c.schedule.map(function (s) { return s.id === installmentId ? Object.assign({}, s, { paid: !s.paid }) : s; })
+      });
+    });
+    persist();
+    render();
+  }
+
+  function regenerateSchedule(client) {
+    var firstDueDate = client.firstDueDate || toISODate(addPeriod(new Date(), client.frequency || "weekly", 1));
+    var generated = generateSchedule(client.amount, client.installment, firstDueDate, client.frequency || "weekly");
+    var schedule = mergeScheduleProgress(client.schedule, generated);
+    state.clients = state.clients.map(function (c) { return c.id === client.id ? Object.assign({}, c, { schedule: schedule, firstDueDate: firstDueDate }) : c; });
+    persist();
+    render();
+  }
+
+  function markFirstNPaid(clientId, n) {
+    state.clients = state.clients.map(function (c) {
+      if (c.id !== clientId) return c;
+      return Object.assign({}, c, { schedule: c.schedule.map(function (s, idx) { return idx < n ? Object.assign({}, s, { paid: true }) : s; }) });
+    });
+    persist();
+    render();
+  }
+
+  function saveNote(clientId) {
+    state.clients = state.clients.map(function (c) { return c.id === clientId ? Object.assign({}, c, { note: state.noteDraft }) : c; });
+    persist();
+  }
+
+  // ---- render ----
+  function render() {
+    var app = document.getElementById("app");
+    app.innerHTML = renderSidebar() + renderMainPane() + (state.showForm ? renderFormModal() : "") + (state.confirmDeleteId ? renderConfirmModal() : "");
+    attachHandlers();
+  }
+
+  function filteredClients() {
+    var q = state.query.trim().toLowerCase();
+    if (!q) return state.clients;
+    return state.clients.filter(function (c) {
+      return (c.name || "").toLowerCase().indexOf(q) !== -1 ||
+        (c.creditNumber || "").toLowerCase().indexOf(q) !== -1 ||
+        (c.phone || "").toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  function renderSidebar() {
+    var clients = filteredClients();
+    var overdueClients = 0;
+    state.clients.forEach(function (c) { if (computeDelay(c.schedule).days > 0) overdueClients++; });
+
+    var rows = clients.map(function (c) {
+      var delay = computeDelay(c.schedule);
+      var selected = c.id === state.selectedId;
+      return '<button class="client-row' + (selected ? ' selected' : '') + '" data-select="' + c.id + '">' +
+        '<div class="client-row-top"><span class="client-name">' + esc(c.name || "Без име") + '</span>' +
+        (delay.days > 0 ? '<span class="client-delay-badge mono">' + delay.days + ' дни</span>' : '') +
+        '</div>' +
+        '<div class="client-row-bottom mono"><span>' + esc(c.creditNumber || "—") + '</span><span>' + formatMoney(c.installment) + '</span></div>' +
+        '</button>';
+    }).join("");
+
+    return '<div class="sidebar">' +
+      '<div class="sidebar-header">' +
+      '<div class="sidebar-title">Кредитен тефтер</div>' +
+      '<div class="sidebar-sub sans">' + state.clients.length + (state.clients.length === 1 ? ' клиент' : ' клиенти') +
+      (overdueClients > 0 ? ' <span class="warn">· ' + overdueClients + ' със закъснение</span>' : '') + '</div>' +
+      '</div>' +
+      '<div class="sidebar-controls">' +
+      '<input class="search-input" id="search-input" placeholder="Търси по име, телефон, №..." value="' + esc(state.query) + '">' +
+      '<button class="add-btn" id="add-client-btn">+ Нов клиент</button>' +
+      '</div>' +
+      '<div class="client-list">' + (clients.length === 0 ? '<div class="empty-note sans">Няма намерени клиенти.</div>' : rows) + '</div>' +
+      '</div>';
+  }
+
+  function renderMainPane() {
+    var client = getSelected();
+    if (!client) {
+      return '<div class="main-pane"><div class="empty-main"><div class="empty-main-inner">' +
+        '<div class="empty-main-title">Избери клиент от списъка</div>' +
+        '<div class="empty-main-body sans">или добави нов, за да видиш неговата персонална страница с погасителен план и календар.</div>' +
+        '</div></div></div>';
+    }
+
+    var delay = computeDelay(client.schedule);
+    var schedule = client.schedule || [];
+    var paidCount = schedule.filter(function (s) { return s.paid; }).length;
+    var freqInfo = FREQUENCIES[client.frequency] || FREQUENCIES.weekly;
+
+    var html = '<div class="main-pane">';
+    html += '<div class="client-header">' +
+      '<div><div class="client-title">' + esc(client.name) + '</div>' +
+      '<div class="client-meta sans">' +
+      (client.phone ? '<span>☎ ' + esc(client.phone) + '</span>' : '') +
+      '<span>№ ' + esc(client.creditNumber || "без номер") + '</span>' +
+      '</div></div>' +
+      '<div class="header-actions"><button class="icon-btn" data-edit="' + client.id + '">✎</button>' +
+      '<button class="icon-btn danger" data-delete="' + client.id + '">✕</button></div>' +
+      '</div>';
+
+    html += '<div class="stat-grid">' +
+      statCard("Размер на кредита", formatMoney(client.amount), "") +
+      statCard("Вноска (" + freqInfo.label.toLowerCase() + ")", formatMoney(client.installment), "") +
+      statCard("Закъснение", delay.days > 0 ? delay.days + " дни" : "няма", delay.days > 0 ? "brick" : "teal") +
+      statCard("Погасени вноски", paidCount + " / " + schedule.length, "") +
+      '</div>';
+
+    if (delay.days > 0) {
+      html += '<div class="overdue-banner sans">⚠ ' + delay.count + (delay.count === 1 ? ' просрочена вноска' : ' просрочени вноски') +
+        ' на обща стойност ' + formatMoney(delay.amount) + '.</div>';
+    }
+
+    html += '<div class="grid-2col">' + renderScheduleTable(client, freqInfo) + renderCalendar(client) + '</div>';
+
+    html += '<div class="note-section">' +
+      '<div class="note-label sans">📝 Бележка</div>' +
+      '<textarea class="note-textarea" id="note-textarea" rows="3" placeholder="Свободна бележка за клиента...">' + esc(state.noteDraft) + '</textarea>' +
+      '</div>';
+
+    html += '</div>';
+    return html;
+  }
+
+  function statCard(label, value, tone) {
+    return '<div class="stat-card"><div class="stat-label sans">' + label + '</div>' +
+      '<div class="stat-value mono' + (tone ? ' ' + tone : '') + '">' + value + '</div></div>';
+  }
+
+  function renderScheduleTable(client, freqInfo) {
+    var schedule = client.schedule || [];
+    var today = startOfDay(new Date());
+    var hasAmounts = client.amount > 0 && client.installment > 0;
+
+    var rows = schedule.map(function (s) {
+      var isOverdue = !s.paid && startOfDay(s.dueDate) < today;
+      var overdueDays = isOverdue ? Math.round((today - startOfDay(s.dueDate)) / DAY_MS) : 0;
+      return '<tr>' +
+        '<td class="mono">' + s.week + '</td>' +
+        '<td class="mono" style="color:' + (isOverdue ? 'var(--brick)' : 'var(--ink)') + '">' + formatDateBG(s.dueDate) + '</td>' +
+        '<td class="mono" style="text-align:right">' + formatMoney(s.amount) + '</td>' +
+        '<td style="text-align:center">' + (isOverdue ? '<span class="overdue-pill mono">' + overdueDays + ' дни</span>' : '<span class="sans" style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
+        '<td style="text-align:center"><button class="paid-toggle' + (s.paid ? ' paid' : '') + '" data-toggle-paid="' + client.id + '|' + s.id + '">' + (s.paid ? '✓' : '') + '</button></td>' +
+        '</tr>';
+    }).join("");
+
+    return '<div class="panel-box">' +
+      '<div class="panel-header"><span>Погасителен план (' + freqInfo.label.toLowerCase() + ')</span>' +
+      (hasAmounts ? '<button class="link-btn" data-regenerate="' + client.id + '">преизчисли</button>' : '') +
+      '</div>' +
+      (schedule.length > 0 ? '<div class="mark-paid-row sans"><span style="color:var(--muted)">Вече платени преди тук:</span>' +
+        '<input id="mark-count-input" placeholder="брой" inputmode="numeric">' +
+        '<button data-mark-paid="' + client.id + '">Отбележи</button></div>' : '') +
+      (schedule.length === 0 ?
+        '<div class="empty-schedule sans">Въведи размер на кредита и вноска, за да се генерира планът.</div>' :
+        '<div class="sched-wrap"><table class="sched"><thead><tr class="sans">' +
+        '<th>' + freqInfo.periodLabel + '</th><th>Дата</th><th style="text-align:right">Сума</th>' +
+        '<th style="text-align:center">Закъснение</th><th style="text-align:center">Платена</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>') +
+      '</div>';
+  }
+
+  function renderCalendar(client) {
+    var schedule = client.schedule || [];
+    var byDate = {};
+    var today = startOfDay(new Date());
+    schedule.forEach(function (s) {
+      var status = s.paid ? "paid" : (startOfDay(s.dueDate) < today ? "overdue" : "upcoming");
+      if (!byDate[s.dueDate]) byDate[s.dueDate] = [];
+      byDate[s.dueDate].push(Object.assign({}, s, { status: status }));
+    });
+
+    var year = state.calCursor.year, month = state.calCursor.month;
+    var firstOfMonth = new Date(year, month, 1);
+    var startWeekday = (firstOfMonth.getDay() + 6) % 7;
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var todayISO = toISODate(new Date());
+
+    var cellsHtml = "";
+    for (var i = 0; i < startWeekday; i++) cellsHtml += '<div></div>';
+    for (var d = 1; d <= daysInMonth; d++) {
+      var iso = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+      var items = byDate[iso];
+      var isToday = iso === todayISO;
+      var cls = "cal-cell";
+      if (isToday) cls += " today";
+      if (items) {
+        var allPaid = items.every(function (it) { return it.status === "paid"; });
+        var anyOverdue = items.some(function (it) { return it.status === "overdue"; });
+        cls += anyOverdue ? " overdue" : (allPaid ? " paidday" : " upcoming");
+      }
+      var dotColor = items ? (items[0].status === "paid" ? "var(--teal)" : items[0].status === "overdue" ? "var(--brick)" : "var(--gold)") : "";
+      var titleAttr = items ? ' title="' + esc(items.map(function (it) { return "Сума: " + formatMoney(it.amount); }).join(", ")) + '"' : "";
+      cellsHtml += '<div class="' + cls + '" ' + titleAttr + '>' + d +
+        (items ? '<div class="cal-dot" style="background:' + dotColor + '"></div>' : '') + '</div>';
+    }
+
+    return '<div class="panel-box">' +
+      '<div class="panel-header"><button class="cal-nav-btn" data-cal-prev="1">‹</button>' +
+      '<span>' + BG_MONTHS[month] + ' ' + year + '</span>' +
+      '<button class="cal-nav-btn" data-cal-next="1">›</button></div>' +
+      '<div class="cal-body">' +
+      '<div class="cal-dow-row">' + BG_DAYS.map(function (dw) { return '<div class="cal-dow">' + dw + '</div>'; }).join("") + '</div>' +
+      '<div class="cal-grid">' + cellsHtml + '</div>' +
+      '<div class="cal-legend sans">' +
+      '<span class="legend-dot"><span class="dot" style="background:var(--gold)"></span>предстои</span>' +
+      '<span class="legend-dot"><span class="dot" style="background:var(--brick)"></span>просрочена</span>' +
+      '<span class="legend-dot"><span class="dot" style="background:var(--teal)"></span>платена</span>' +
+      '</div></div></div>';
+  }
+
+  function renderFormModal() {
+    var f = state.form;
+    var isEdit = !!state.editingId;
+    var freqOptions = Object.keys(FREQUENCIES).map(function (key) {
+      return '<option value="' + key + '"' + (f.frequency === key ? ' selected' : '') + '>' + FREQUENCIES[key].label + '</option>';
+    }).join("");
+
+    return '<div class="modal-overlay" id="form-overlay">' +
+      '<form class="modal-box sans" id="client-form">' +
+      '<div class="modal-head"><div class="modal-title">' + (isEdit ? "Редактирай клиент" : "Нов клиент") + '</div>' +
+      '<button type="button" class="modal-close" id="form-close">✕</button></div>' +
+      field("Име", '<input id="f-name" value="' + esc(f.name) + '" placeholder="Иван Иванов">') +
+      field("Телефон", '<input id="f-phone" value="' + esc(f.phone) + '" placeholder="0888 123 456">') +
+      field("Номер на кредит", '<input id="f-creditNumber" value="' + esc(f.creditNumber) + '" placeholder="напр. EC-10234">') +
+      '<div class="field-row">' +
+      field("Размер на кредита (лв.)", '<input id="f-amount" value="' + esc(f.amount) + '" inputmode="decimal" placeholder="1000">') +
+      field("Вноска (лв.)", '<input id="f-installment" value="' + esc(f.installment) + '" inputmode="decimal" placeholder="50">') +
+      '</div>' +
+      '<div class="field-row">' +
+      field("Периодичност", '<select id="f-frequency">' + freqOptions + '</select>') +
+      field("Дата на първа вноска", '<input type="date" id="f-firstDueDate" value="' + esc(f.firstDueDate) + '">') +
+      '</div>' +
+      field("Бележка", '<textarea id="f-note" rows="2">' + esc(f.note) + '</textarea>') +
+      (state.formError ? '<div class="form-error">' + esc(state.formError) + '</div>' : '') +
+      '<div class="form-hint">Ако оставиш датата на първа вноска празна, тя ще се изчисли от днес според избраната периодичност. При запис планът се преизчислява автоматично по новите стойности — вече отбелязаните платени вноски се запазват по ред.</div>' +
+      '<div class="modal-actions"><button type="button" class="btn-secondary" id="form-cancel">Отказ</button>' +
+      '<button type="submit" class="btn-primary">' + (isEdit ? "Запази" : "Добави") + '</button></div>' +
+      '</form></div>';
+  }
+
+  function field(label, inputHtml) {
+    return '<div class="field"><div class="field-label">' + label + '</div>' + inputHtml + '</div>';
+  }
+
+  function renderConfirmModal() {
+    return '<div class="modal-overlay" id="confirm-overlay">' +
+      '<div class="modal-box sans" style="max-width:340px">' +
+      '<div style="font-size:13.5px;color:var(--ink);margin-bottom:16px;line-height:1.5">Сигурен ли си, че искаш да изтриеш този клиент? Действието не може да се отмени.</div>' +
+      '<div class="modal-actions"><button class="btn-secondary" id="confirm-cancel">Отказ</button>' +
+      '<button class="btn-primary danger" id="confirm-delete">Изтрий</button></div>' +
+      '</div></div>';
+  }
+
+  // ---- event wiring ----
+  function attachHandlers() {
+    var app = document.getElementById("app");
+
+    var searchInput = document.getElementById("search-input");
+    if (searchInput) {
+      searchInput.addEventListener("input", function (e) {
+        state.query = e.target.value;
+        var pos = e.target.selectionStart;
+        render();
+        var el = document.getElementById("search-input");
+        if (el) { el.focus(); el.setSelectionRange(pos, pos); }
+      });
+    }
+
+    var addBtn = document.getElementById("add-client-btn");
+    if (addBtn) addBtn.addEventListener("click", openAddForm);
+
+    app.querySelectorAll("[data-select]").forEach(function (el) {
+      el.addEventListener("click", function () { selectClient(el.getAttribute("data-select")); });
+    });
+
+    app.querySelectorAll("[data-edit]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var c = state.clients.find(function (x) { return x.id === el.getAttribute("data-edit"); });
+        if (c) openEditForm(c);
+      });
+    });
+
+    app.querySelectorAll("[data-delete]").forEach(function (el) {
+      el.addEventListener("click", function () { state.confirmDeleteId = el.getAttribute("data-delete"); render(); });
+    });
+
+    app.querySelectorAll("[data-toggle-paid]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var parts = el.getAttribute("data-toggle-paid").split("|");
+        toggleInstallmentPaid(parts[0], parts[1]);
+      });
+    });
+
+    app.querySelectorAll("[data-regenerate]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var c = state.clients.find(function (x) { return x.id === el.getAttribute("data-regenerate"); });
+        if (c) regenerateSchedule(c);
+      });
+    });
+
+    app.querySelectorAll("[data-mark-paid]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var input = document.getElementById("mark-count-input");
+        var n = parseInt(input ? input.value : "", 10);
+        if (!isNaN(n) && n > 0) markFirstNPaid(el.getAttribute("data-mark-paid"), n);
+      });
+    });
+
+    app.querySelectorAll("[data-cal-prev]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var c = state.calCursor;
+        state.calCursor = c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 };
+        render();
+      });
+    });
+    app.querySelectorAll("[data-cal-next]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var c = state.calCursor;
+        state.calCursor = c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 };
+        render();
+      });
+    });
+
+    var noteArea = document.getElementById("note-textarea");
+    if (noteArea) {
+      noteArea.addEventListener("input", function (e) { state.noteDraft = e.target.value; });
+      noteArea.addEventListener("blur", function () {
+        var c = getSelected();
+        if (c) saveNote(c.id);
+      });
+    }
+
+    var formEl = document.getElementById("client-form");
+    if (formEl) {
+      ["name","phone","creditNumber","amount","installment","frequency","firstDueDate","note"].forEach(function (key) {
+        var el = document.getElementById("f-" + key);
+        if (el) el.addEventListener("input", function (e) { state.form[key] = e.target.value; });
+      });
+      formEl.addEventListener("submit", submitForm);
+    }
+    var formClose = document.getElementById("form-close");
+    if (formClose) formClose.addEventListener("click", closeForm);
+    var formCancel = document.getElementById("form-cancel");
+    if (formCancel) formCancel.addEventListener("click", closeForm);
+    var formOverlay = document.getElementById("form-overlay");
+    if (formOverlay) formOverlay.addEventListener("click", function (e) { if (e.target === formOverlay) closeForm(); });
+
+    var confirmCancel = document.getElementById("confirm-cancel");
+    if (confirmCancel) confirmCancel.addEventListener("click", function () { state.confirmDeleteId = null; render(); });
+    var confirmDeleteBtn = document.getElementById("confirm-delete");
+    if (confirmDeleteBtn) confirmDeleteBtn.addEventListener("click", function () { deleteClient(state.confirmDeleteId); });
+    var confirmOverlay = document.getElementById("confirm-overlay");
+    if (confirmOverlay) confirmOverlay.addEventListener("click", function (e) { if (e.target === confirmOverlay) { state.confirmDeleteId = null; render(); } });
+  }
+
+  loadClients();
+  render();
+})();
+</script>
+</body>
+</html>
