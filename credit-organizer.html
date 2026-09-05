@@ -107,10 +107,16 @@
     border-bottom: 1px solid var(--line); background: var(--amberSoft); font-size: 13.5px; font-weight: 600; color: var(--navy);
   }
   .link-btn { background: transparent; border: none; font-size: 11.5px; color: var(--gold); cursor: pointer; }
-  .mark-paid-row { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
-  .mark-paid-row input { width: 60px; border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; font-size: 12.5px; outline: none; }
-  .mark-paid-row button { background: var(--teal); color: #fff; border: none; border-radius: 5px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
   .empty-schedule { padding: 18px 14px; font-size: 13px; color: var(--muted); }
+  .date-select-row { display: flex; gap: 8px; flex: 1; min-width: 0; }
+  .date-select { flex: 1; min-width: 0; }
+  .payment-add-row { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .payment-add-row .date-select-row { min-width: 180px; }
+  .pay-amount-input { width: 90px; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 16px; outline: none; }
+  .payment-add-row button { background: var(--teal); color: #fff; border: none; border-radius: 6px; padding: 9px 14px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .payment-list { max-height: 220px; overflow-y: auto; }
+  .payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 13px; }
+  .payment-del { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 6px; }
 
   table.sched { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.sched th { text-align: left; padding: 7px 12px; font-weight: 500; font-size: 11.5px; color: var(--muted); }
@@ -209,7 +215,13 @@
   };
 
   function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
-  function toISODate(d) { var dt = new Date(d); dt.setHours(0,0,0,0); return dt.toISOString().slice(0,10); }
+  function toISODate(d) {
+    var dt = new Date(d);
+    var y = dt.getFullYear();
+    var m = String(dt.getMonth() + 1).padStart(2, "0");
+    var day = String(dt.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
   function startOfDay(d) { var dt = new Date(d); dt.setHours(0,0,0,0); return dt; }
   function addPeriod(date, frequency, count) {
     var dt = new Date(date);
@@ -234,12 +246,12 @@
     });
   }
 
-  function generateSchedule(amount, installment, firstDueDateISO, frequency) {
+  function generateSchedule(amount, installment, firstDueDateISO, frequency, explicitCount) {
     var amt = Number(amount) || 0;
     var inst = Number(installment) || 0;
     if (amt <= 0 || inst <= 0) return [];
     var freq = FREQUENCIES[frequency] ? frequency : "weekly";
-    var periods = Math.max(1, Math.ceil(amt / inst));
+    var periods = (explicitCount && explicitCount > 0) ? Math.round(explicitCount) : Math.max(1, Math.ceil(amt / inst));
     var first = startOfDay(firstDueDateISO || addPeriod(new Date(), freq, 1));
     var schedule = [];
     var remaining = amt;
@@ -247,32 +259,53 @@
       var dueDate = i === 0 ? first : addPeriod(first, freq, i);
       var thisAmount = i === periods - 1 ? Math.round(remaining * 100) / 100 : inst;
       remaining = Math.round((remaining - thisAmount) * 100) / 100;
-      schedule.push({ id: uid(), week: i + 1, dueDate: toISODate(dueDate), amount: thisAmount, paid: false });
+      schedule.push({ id: uid(), week: i + 1, dueDate: toISODate(dueDate), amount: thisAmount });
     }
     return schedule;
   }
 
-  function computeDelay(schedule) {
+  // Applies the client's total logged payments against the schedule in due-date order.
+  // Overpayment on one installment automatically rolls forward to cover the next one(s).
+  function allocatePayments(schedule, payments) {
+    var pool = (payments || []).reduce(function (sum, p) { return sum + (Number(p.amount) || 0); }, 0);
+    pool = Math.round(pool * 100) / 100;
+    return (schedule || []).map(function (item) {
+      var amt = Number(item.amount) || 0;
+      var paidAmount;
+      if (pool >= amt) { paidAmount = amt; pool = Math.round((pool - amt) * 100) / 100; }
+      else if (pool > 0) { paidAmount = pool; pool = 0; }
+      else { paidAmount = 0; }
+      var remaining = Math.round((amt - paidAmount) * 100) / 100;
+      return Object.assign({}, item, { paidAmount: paidAmount, remaining: remaining });
+    });
+  }
+
+  function computeSummary(schedule, payments) {
+    var allocated = allocatePayments(schedule, payments);
     var today = startOfDay(new Date());
-    var earliestOverdue = null, overdueCount = 0, overdueAmount = 0;
-    (schedule || []).forEach(function (item) {
-      if (!item.paid && startOfDay(item.dueDate) < today) {
+    var totalDue = 0, totalPaidApplied = 0, overdueAmount = 0, overdueCount = 0, earliestOverdue = null;
+    allocated.forEach(function (item) {
+      totalDue += item.amount;
+      totalPaidApplied += item.paidAmount;
+      if (item.remaining > 0.004 && startOfDay(item.dueDate) < today) {
+        overdueAmount += item.remaining;
         overdueCount++;
-        overdueAmount += Number(item.amount) || 0;
         if (!earliestOverdue || startOfDay(item.dueDate) < startOfDay(earliestOverdue)) earliestOverdue = item.dueDate;
       }
     });
-    if (!earliestOverdue) return { days: 0, count: 0, amount: 0 };
-    var days = Math.round((today - startOfDay(earliestOverdue)) / DAY_MS);
-    return { days: days, count: overdueCount, amount: Math.round(overdueAmount * 100) / 100 };
-  }
-
-  function mergeScheduleProgress(oldSchedule, newSchedule) {
-    if (!oldSchedule || oldSchedule.length === 0) return newSchedule;
-    return newSchedule.map(function (item, idx) {
-      var old = oldSchedule[idx];
-      return old ? Object.assign({}, item, { paid: !!old.paid }) : item;
-    });
+    var days = earliestOverdue ? Math.round((today - startOfDay(earliestOverdue)) / DAY_MS) : 0;
+    var totalPaidLogged = (payments || []).reduce(function (s, p) { return s + (Number(p.amount) || 0); }, 0);
+    var paidInstallments = allocated.filter(function (i) { return i.remaining <= 0.004; }).length;
+    return {
+      allocated: allocated,
+      totalDue: Math.round(totalDue * 100) / 100,
+      totalPaid: Math.round(totalPaidLogged * 100) / 100,
+      overdueAmount: Math.round(overdueAmount * 100) / 100,
+      overdueCount: overdueCount,
+      days: days,
+      paidInstallments: paidInstallments,
+      totalInstallments: allocated.length
+    };
   }
 
   // ---- state ----
@@ -291,7 +324,8 @@
   };
 
   function emptyForm() {
-    return { name: "", phone: "", creditNumber: "", amount: "", installment: "", frequency: "weekly", firstDueDate: "", note: "" };
+    return { name: "", phone: "", creditNumber: "", amount: "", installment: "", installmentCount: "", frequency: "weekly", firstDueDate: "",
+      workplace: "", contactName: "", contactPhone: "", note: "" };
   }
 
   function loadClients() {
@@ -335,8 +369,12 @@
       creditNumber: client.creditNumber || "",
       amount: client.amount != null ? String(client.amount) : "",
       installment: client.installment != null ? String(client.installment) : "",
+      installmentCount: client.schedule && client.schedule.length ? String(client.schedule.length) : "",
       frequency: client.frequency || "weekly",
       firstDueDate: client.firstDueDate || (client.schedule && client.schedule[0] ? client.schedule[0].dueDate : ""),
+      workplace: client.workplace || "",
+      contactName: client.contactName || "",
+      contactPhone: client.contactPhone || "",
       note: client.note || ""
     };
     state.editingId = client.id;
@@ -358,6 +396,8 @@
 
     var frequency = FREQUENCIES[f.frequency] ? f.frequency : "weekly";
     var firstDueDate = f.firstDueDate || "";
+    var explicitCount = f.installmentCount ? parseInt(f.installmentCount, 10) : 0;
+    if (f.installmentCount && (isNaN(explicitCount) || explicitCount <= 0)) { state.formError = "Броят вноски трябва да е положително число."; render(); return; }
 
     if (state.editingId) {
       state.clients = state.clients.map(function (c) {
@@ -367,23 +407,25 @@
         var effectiveFirstDue = firstDueDate || c.firstDueDate;
         var schedule = c.schedule;
         if (newAmount > 0 && newInstallment > 0) {
-          var generated = generateSchedule(newAmount, newInstallment, effectiveFirstDue, frequency);
-          schedule = mergeScheduleProgress(c.schedule, generated);
+          schedule = generateSchedule(newAmount, newInstallment, effectiveFirstDue, frequency, explicitCount);
         }
         return Object.assign({}, c, {
           name: f.name.trim(), phone: f.phone.trim(), creditNumber: f.creditNumber.trim(),
           amount: newAmount, installment: newInstallment, frequency: frequency,
-          firstDueDate: effectiveFirstDue, note: f.note, schedule: schedule
+          firstDueDate: effectiveFirstDue,
+          workplace: f.workplace.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(),
+          note: f.note, schedule: schedule
         });
       });
     } else {
       var createdDate = toISODate(new Date());
-      var schedule2 = amountNum > 0 && installmentNum > 0 ? generateSchedule(amountNum, installmentNum, firstDueDate, frequency) : [];
+      var schedule2 = amountNum > 0 && installmentNum > 0 ? generateSchedule(amountNum, installmentNum, firstDueDate, frequency, explicitCount) : [];
       var newClient = {
         id: uid(), name: f.name.trim(), phone: f.phone.trim(), creditNumber: f.creditNumber.trim(),
         amount: f.amount === "" ? 0 : amountNum, installment: f.installment === "" ? 0 : installmentNum,
         frequency: frequency, firstDueDate: firstDueDate || (schedule2[0] ? schedule2[0].dueDate : ""),
-        note: f.note, createdDate: createdDate, schedule: schedule2
+        workplace: f.workplace.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(),
+        note: f.note, createdDate: createdDate, schedule: schedule2, payments: []
       };
       state.clients = [newClient].concat(state.clients);
       state.selectedId = newClient.id;
@@ -402,30 +444,31 @@
     render();
   }
 
-  function toggleInstallmentPaid(clientId, installmentId) {
-    state.clients = state.clients.map(function (c) {
-      if (c.id !== clientId) return c;
-      return Object.assign({}, c, {
-        schedule: c.schedule.map(function (s) { return s.id === installmentId ? Object.assign({}, s, { paid: !s.paid }) : s; })
-      });
-    });
-    persist();
-    render();
-  }
-
   function regenerateSchedule(client) {
     var firstDueDate = client.firstDueDate || toISODate(addPeriod(new Date(), client.frequency || "weekly", 1));
-    var generated = generateSchedule(client.amount, client.installment, firstDueDate, client.frequency || "weekly");
-    var schedule = mergeScheduleProgress(client.schedule, generated);
+    var keepCount = client.schedule && client.schedule.length ? client.schedule.length : 0;
+    var schedule = generateSchedule(client.amount, client.installment, firstDueDate, client.frequency || "weekly", keepCount);
     state.clients = state.clients.map(function (c) { return c.id === client.id ? Object.assign({}, c, { schedule: schedule, firstDueDate: firstDueDate }) : c; });
     persist();
     render();
   }
 
-  function markFirstNPaid(clientId, n) {
+  function addPayment(clientId, dateISO, amount) {
+    var amt = Number(amount);
+    if (!dateISO || isNaN(amt) || amt <= 0) return;
     state.clients = state.clients.map(function (c) {
       if (c.id !== clientId) return c;
-      return Object.assign({}, c, { schedule: c.schedule.map(function (s, idx) { return idx < n ? Object.assign({}, s, { paid: true }) : s; }) });
+      var payments = (c.payments || []).concat([{ id: uid(), date: dateISO, amount: Math.round(amt * 100) / 100 }]);
+      return Object.assign({}, c, { payments: payments });
+    });
+    persist();
+    render();
+  }
+
+  function deletePayment(clientId, paymentId) {
+    state.clients = state.clients.map(function (c) {
+      if (c.id !== clientId) return c;
+      return Object.assign({}, c, { payments: (c.payments || []).filter(function (p) { return p.id !== paymentId; }) });
     });
     persist();
     render();
@@ -492,14 +535,14 @@
   function renderSidebar() {
     var clients = filteredClients();
     var overdueClients = 0;
-    state.clients.forEach(function (c) { if (computeDelay(c.schedule).days > 0) overdueClients++; });
+    state.clients.forEach(function (c) { if (computeSummary(c.schedule, c.payments).days > 0) overdueClients++; });
 
     var rows = clients.map(function (c) {
-      var delay = computeDelay(c.schedule);
+      var summary = computeSummary(c.schedule, c.payments);
       var selected = c.id === state.selectedId;
       return '<button class="client-row' + (selected ? ' selected' : '') + '" data-select="' + c.id + '">' +
         '<div class="client-row-top"><span class="client-name">' + esc(c.name || "Без име") + '</span>' +
-        (delay.days > 0 ? '<span class="client-delay-badge mono">' + delay.days + ' дни</span>' : '') +
+        (summary.days > 0 ? '<span class="client-delay-badge mono">' + summary.days + ' дни</span>' : '') +
         '</div>' +
         '<div class="client-row-bottom mono"><span>' + esc(c.creditNumber || "—") + '</span><span>' + formatMoney(c.installment) + '</span></div>' +
         '</button>';
@@ -531,9 +574,8 @@
         '</div></div></div>';
     }
 
-    var delay = computeDelay(client.schedule);
+    var summary = computeSummary(client.schedule, client.payments);
     var schedule = client.schedule || [];
-    var paidCount = schedule.filter(function (s) { return s.paid; }).length;
     var freqInfo = FREQUENCIES[client.frequency] || FREQUENCIES.weekly;
 
     var html = '<div class="main-pane">';
@@ -542,7 +584,13 @@
       '<div class="client-meta sans">' +
       (client.phone ? '<span>☎ ' + esc(client.phone) + '</span>' : '') +
       '<span>№ ' + esc(client.creditNumber || "без номер") + '</span>' +
-      '</div></div>' +
+      (client.workplace ? '<span>💼 ' + esc(client.workplace) + '</span>' : '') +
+      '</div>' +
+      (client.contactName || client.contactPhone ?
+        '<div class="client-meta sans" style="margin-top:4px;">' +
+        '<span>Лице за контакт: ' + esc(client.contactName || "—") + (client.contactPhone ? ' · ' + esc(client.contactPhone) : '') + '</span>' +
+        '</div>' : '') +
+      '</div>' +
       '<div class="header-actions"><button class="icon-btn" data-edit="' + client.id + '">✎</button>' +
       '<button class="icon-btn danger" data-delete="' + client.id + '">✕</button></div>' +
       '</div>';
@@ -550,16 +598,21 @@
     html += '<div class="stat-grid">' +
       statCard("Размер на кредита", formatMoney(client.amount), "") +
       statCard("Вноска (" + freqInfo.label.toLowerCase() + ")", formatMoney(client.installment), "") +
-      statCard("Закъснение", delay.days > 0 ? delay.days + " дни" : "няма", delay.days > 0 ? "brick" : "teal") +
-      statCard("Погасени вноски", paidCount + " / " + schedule.length, "") +
+      statCard("Брой вноски", String(summary.totalInstallments), "") +
+      statCard("Платено общо", formatMoney(summary.totalPaid), "teal") +
+      statCard("Дължимо към днешна дата", formatMoney(summary.overdueAmount), summary.overdueAmount > 0 ? "brick" : "teal") +
+      statCard("Закъснение", summary.days > 0 ? summary.days + " дни" : "няма", summary.days > 0 ? "brick" : "teal") +
+      statCard("Сума за предсрочно погасяване", "очаква лихвен %", "") +
       '</div>';
 
-    if (delay.days > 0) {
-      html += '<div class="overdue-banner sans">⚠ ' + delay.count + (delay.count === 1 ? ' просрочена вноска' : ' просрочени вноски') +
-        ' на обща стойност ' + formatMoney(delay.amount) + '.</div>';
+    if (summary.days > 0) {
+      html += '<div class="overdue-banner sans">⚠ ' + summary.overdueCount + (summary.overdueCount === 1 ? ' просрочена вноска' : ' просрочени вноски') +
+        ' на обща стойност ' + formatMoney(summary.overdueAmount) + '.</div>';
     }
 
-    html += '<div class="grid-2col">' + renderScheduleTable(client, freqInfo) + renderCalendar(client) + '</div>';
+    html += '<div class="grid-2col">' + renderScheduleTable(client, freqInfo, summary) + renderCalendar(client) + '</div>';
+
+    html += renderPaymentsPanel(client);
 
     html += '<div class="note-section">' +
       '<div class="note-label sans">📝 Бележка</div>' +
@@ -575,20 +628,22 @@
       '<div class="stat-value mono' + (tone ? ' ' + tone : '') + '">' + value + '</div></div>';
   }
 
-  function renderScheduleTable(client, freqInfo) {
-    var schedule = client.schedule || [];
+  function renderScheduleTable(client, freqInfo, summary) {
+    var schedule = summary.allocated;
     var today = startOfDay(new Date());
     var hasAmounts = client.amount > 0 && client.installment > 0;
 
     var rows = schedule.map(function (s) {
-      var isOverdue = !s.paid && startOfDay(s.dueDate) < today;
+      var isOverdue = s.remaining > 0.004 && startOfDay(s.dueDate) < today;
       var overdueDays = isOverdue ? Math.round((today - startOfDay(s.dueDate)) / DAY_MS) : 0;
+      var isPaid = s.remaining <= 0.004;
       return '<tr>' +
         '<td class="mono">' + s.week + '</td>' +
         '<td class="mono" style="color:' + (isOverdue ? 'var(--brick)' : 'var(--ink)') + '">' + formatDateBG(s.dueDate) + '</td>' +
         '<td class="mono" style="text-align:right">' + formatMoney(s.amount) + '</td>' +
-        '<td style="text-align:center">' + (isOverdue ? '<span class="overdue-pill mono">' + overdueDays + ' дни</span>' : '<span class="sans" style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
-        '<td style="text-align:center"><button class="paid-toggle' + (s.paid ? ' paid' : '') + '" data-toggle-paid="' + client.id + '|' + s.id + '">' + (s.paid ? '✓' : '') + '</button></td>' +
+        '<td class="mono" style="text-align:right;color:var(--teal)">' + (s.paidAmount > 0 ? formatMoney(s.paidAmount) : "—") + '</td>' +
+        '<td class="mono" style="text-align:right;' + (isPaid ? '' : 'color:var(--brick)') + '">' + (isPaid ? "0.00 лв." : formatMoney(s.remaining)) + '</td>' +
+        '<td style="text-align:center">' + (isOverdue ? '<span class="overdue-pill mono">' + overdueDays + ' дни</span>' : (isPaid ? '<span class="sans" style="color:var(--teal);font-size:12px">✓</span>' : '<span class="sans" style="color:var(--muted);font-size:12px">—</span>')) + '</td>' +
         '</tr>';
     }).join("");
 
@@ -596,24 +651,45 @@
       '<div class="panel-header"><span>Погасителен план (' + freqInfo.label.toLowerCase() + ')</span>' +
       (hasAmounts ? '<button class="link-btn" data-regenerate="' + client.id + '">преизчисли</button>' : '') +
       '</div>' +
-      (schedule.length > 0 ? '<div class="mark-paid-row sans"><span style="color:var(--muted)">Вече платени преди тук:</span>' +
-        '<input id="mark-count-input" placeholder="брой" inputmode="numeric">' +
-        '<button data-mark-paid="' + client.id + '">Отбележи</button></div>' : '') +
       (schedule.length === 0 ?
         '<div class="empty-schedule sans">Въведи размер на кредита и вноска, за да се генерира планът.</div>' :
         '<div class="sched-wrap"><table class="sched"><thead><tr class="sans">' +
-        '<th>' + freqInfo.periodLabel + '</th><th>Дата</th><th style="text-align:right">Сума</th>' +
-        '<th style="text-align:center">Закъснение</th><th style="text-align:center">Платена</th></tr></thead>' +
+        '<th>' + freqInfo.periodLabel + '</th><th>Дата</th><th style="text-align:right">Дължимо</th>' +
+        '<th style="text-align:right">Платено</th><th style="text-align:right">Остатък</th><th style="text-align:center">Закъснение</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>') +
       '</div>';
   }
 
+  function renderPaymentsPanel(client) {
+    var payments = (client.payments || []).slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
+    var rows = payments.map(function (p) {
+      return '<div class="payment-row sans">' +
+        '<span class="mono">' + formatDateBG(p.date) + '</span>' +
+        '<span class="mono" style="color:var(--teal);font-weight:600;">' + formatMoney(p.amount) + '</span>' +
+        '<button class="payment-del" data-delete-payment="' + client.id + '|' + p.id + '">✕</button>' +
+        '</div>';
+    }).join("");
+
+    return '<div class="panel-box" style="margin-top:20px;">' +
+      '<div class="panel-header"><span>Плащания</span></div>' +
+      '<div class="payment-add-row sans">' +
+      renderDateSelects("pay-date", toISODate(new Date())) +
+      '<input id="pay-amount" class="pay-amount-input" inputmode="decimal" placeholder="Сума">' +
+      '<button id="add-payment-btn" data-add-payment="' + client.id + '">Добави</button>' +
+      '</div>' +
+      (payments.length === 0 ?
+        '<div class="empty-schedule sans">Все още няма записани плащания.</div>' :
+        '<div class="payment-list">' + rows + '</div>') +
+      '</div>';
+  }
+
   function renderCalendar(client) {
-    var schedule = client.schedule || [];
+    var summary = computeSummary(client.schedule, client.payments);
+    var schedule = summary.allocated;
     var byDate = {};
     var today = startOfDay(new Date());
     schedule.forEach(function (s) {
-      var status = s.paid ? "paid" : (startOfDay(s.dueDate) < today ? "overdue" : "upcoming");
+      var status = s.remaining <= 0.004 ? "paid" : (startOfDay(s.dueDate) < today ? "overdue" : "upcoming");
       if (!byDate[s.dueDate]) byDate[s.dueDate] = [];
       byDate[s.dueDate].push(Object.assign({}, s, { status: status }));
     });
@@ -657,6 +733,34 @@
       '</div></div></div>';
   }
 
+  function renderDateSelects(prefix, selectedISO) {
+    var parts = (selectedISO || "").split("-");
+    var selYear = parts[0] || "";
+    var selMonth = parts[1] ? String(parseInt(parts[1], 10)) : "";
+    var selDay = parts[2] ? String(parseInt(parts[2], 10)) : "";
+
+    var dayOptions = '<option value="">Ден</option>';
+    for (var d = 1; d <= 31; d++) {
+      dayOptions += '<option value="' + d + '"' + (selDay === String(d) ? ' selected' : '') + '>' + d + '</option>';
+    }
+    var monthNamesShort = ["Яну", "Фев", "Мар", "Апр", "Май", "Юни", "Юли", "Авг", "Сеп", "Окт", "Ное", "Дек"];
+    var monthOptions = '<option value="">Месец</option>';
+    for (var m = 1; m <= 12; m++) {
+      monthOptions += '<option value="' + m + '"' + (selMonth === String(m) ? ' selected' : '') + '>' + monthNamesShort[m - 1] + '</option>';
+    }
+    var curYear = new Date().getFullYear();
+    var yearOptions = '<option value="">Година</option>';
+    for (var y = curYear - 1; y <= curYear + 3; y++) {
+      yearOptions += '<option value="' + y + '"' + (selYear === String(y) ? ' selected' : '') + '>' + y + '</option>';
+    }
+
+    return '<div class="date-select-row">' +
+      '<select id="' + prefix + '-day" class="date-select">' + dayOptions + '</select>' +
+      '<select id="' + prefix + '-month" class="date-select" style="flex:1.3;">' + monthOptions + '</select>' +
+      '<select id="' + prefix + '-year" class="date-select" style="flex:1.2;">' + yearOptions + '</select>' +
+      '</div>';
+  }
+
   function renderFormModal() {
     var f = state.form;
     var isEdit = !!state.editingId;
@@ -673,11 +777,15 @@
       field("Номер на кредит", '<input id="f-creditNumber" value="' + esc(f.creditNumber) + '" placeholder="напр. EC-10234">') +
       field("Размер на кредита (лв.)", '<input id="f-amount" value="' + esc(f.amount) + '" inputmode="decimal" placeholder="1000">') +
       field("Вноска (лв.)", '<input id="f-installment" value="' + esc(f.installment) + '" inputmode="decimal" placeholder="50">') +
+      field("Брой вноски (по избор, ако не пишеш — смята се сам)", '<input id="f-installmentCount" value="' + esc(f.installmentCount) + '" inputmode="numeric" placeholder="напр. 10">') +
       field("Периодичност", '<select id="f-frequency">' + freqOptions + '</select>') +
-      field("Дата на първа вноска", '<input type="date" id="f-firstDueDate" value="' + esc(f.firstDueDate) + '">') +
+      field("Дата на първа вноска", renderDateSelects("f-due", f.firstDueDate)) +
+      field("Месторабота", '<input id="f-workplace" value="' + esc(f.workplace) + '" placeholder="напр. завод / фирма">') +
+      field("Лице за контакт – име", '<input id="f-contactName" value="' + esc(f.contactName) + '" placeholder="напр. съпруга, роднина">') +
+      field("Лице за контакт – телефон", '<input id="f-contactPhone" value="' + esc(f.contactPhone) + '" placeholder="0888 000 000">') +
       field("Бележка", '<textarea id="f-note" rows="2">' + esc(f.note) + '</textarea>') +
       (state.formError ? '<div class="form-error">' + esc(state.formError) + '</div>' : '') +
-      '<div class="form-hint">Ако оставиш датата на първа вноска празна, тя ще се изчисли от днес според избраната периодичност. При запис планът се преизчислява автоматично по новите стойности — вече отбелязаните платени вноски се запазват по ред.</div>' +
+      '<div class="form-hint">Ако оставиш датата на първа вноска празна, тя ще се изчисли от днес според избраната периодичност. При запис планът се преизчислява автоматично по новите стойности — записаните плащания не се засягат.</div>' +
       '<div class="modal-actions"><button type="button" class="btn-secondary" id="form-cancel">Отказ</button>' +
       '<button type="submit" class="btn-primary">' + (isEdit ? "Запази" : "Добави") + '</button></div>' +
       '</form></div>';
@@ -743,13 +851,6 @@
       el.addEventListener("click", function () { state.confirmDeleteId = el.getAttribute("data-delete"); render(); });
     });
 
-    app.querySelectorAll("[data-toggle-paid]").forEach(function (el) {
-      el.addEventListener("click", function () {
-        var parts = el.getAttribute("data-toggle-paid").split("|");
-        toggleInstallmentPaid(parts[0], parts[1]);
-      });
-    });
-
     app.querySelectorAll("[data-regenerate]").forEach(function (el) {
       el.addEventListener("click", function () {
         var c = state.clients.find(function (x) { return x.id === el.getAttribute("data-regenerate"); });
@@ -757,11 +858,24 @@
       });
     });
 
-    app.querySelectorAll("[data-mark-paid]").forEach(function (el) {
+    app.querySelectorAll("[data-add-payment]").forEach(function (el) {
       el.addEventListener("click", function () {
-        var input = document.getElementById("mark-count-input");
-        var n = parseInt(input ? input.value : "", 10);
-        if (!isNaN(n) && n > 0) markFirstNPaid(el.getAttribute("data-mark-paid"), n);
+        var clientId = el.getAttribute("data-add-payment");
+        var d = document.getElementById("pay-date-day");
+        var m = document.getElementById("pay-date-month");
+        var y = document.getElementById("pay-date-year");
+        var amountEl = document.getElementById("pay-amount");
+        if (!d || !m || !y || !amountEl) return;
+        if (!d.value || !m.value || !y.value) { alert("Избери дата на плащането."); return; }
+        var dateISO = y.value + "-" + String(m.value).padStart(2, "0") + "-" + String(d.value).padStart(2, "0");
+        addPayment(clientId, dateISO, amountEl.value);
+      });
+    });
+
+    app.querySelectorAll("[data-delete-payment]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var parts = el.getAttribute("data-delete-payment").split("|");
+        deletePayment(parts[0], parts[1]);
       });
     });
 
@@ -791,10 +905,31 @@
 
     var formEl = document.getElementById("client-form");
     if (formEl) {
-      ["name","phone","creditNumber","amount","installment","frequency","firstDueDate","note"].forEach(function (key) {
+      ["name","phone","creditNumber","amount","installment","installmentCount","frequency","workplace","contactName","contactPhone","note"].forEach(function (key) {
         var el = document.getElementById("f-" + key);
         if (el) el.addEventListener("input", function (e) { state.form[key] = e.target.value; });
       });
+
+      var amountEl = document.getElementById("f-amount");
+      var installmentEl = document.getElementById("f-installment");
+
+      var dayEl = document.getElementById("f-due-day");
+      var monthEl = document.getElementById("f-due-month");
+      var yearEl = document.getElementById("f-due-year");
+      function syncDueDate() {
+        var d = dayEl ? dayEl.value : "";
+        var m = monthEl ? monthEl.value : "";
+        var y = yearEl ? yearEl.value : "";
+        if (d && m && y) {
+          state.form.firstDueDate = y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+        } else {
+          state.form.firstDueDate = "";
+        }
+      }
+      if (dayEl) dayEl.addEventListener("change", syncDueDate);
+      if (monthEl) monthEl.addEventListener("change", syncDueDate);
+      if (yearEl) yearEl.addEventListener("change", syncDueDate);
+
       formEl.addEventListener("submit", submitForm);
     }
     var formClose = document.getElementById("form-close");
